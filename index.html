@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gig Payment Contract</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.min.js" ></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 400px;
+            margin: 20px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Gig Payment Contract</h1>
+        <button id="connectWallet">Connect Wallet</button>
+        <p><strong>Connected Address:</strong> <span id="walletAddress">Not connected</span></p>
+        <p><strong>Contract Balance:</strong> <span id="contractBalance">Loading...</span> ETH</p>
+        
+        <button id="sendPayment">Send Payment</button>
+        <br>
+        <input type="number" id="newPaymentAmount" placeholder="New Payment Amount (ETH)" />
+        <button id="updatePaymentAmount">Update Payment Amount</button>
+        
+        <input type="text" id="newGigWorker" placeholder="New Worker Address" />
+        <button id="updateGigWorker">Update Gig Worker</button>
+    </div>
+
+    <script>
+        const contractAddress = 0xAe3489cb7eD3a921B04dcF227B953C46f50dd393; // Replace with your deployed contract address
+        const contractABI = [
+						{
+							"inputs": [
+								{
+									"internalType": "address payable",
+									"name": "_gigWorker",
+									"type": "address"
+								},
+								{
+									"internalType": "uint256",
+									"name": "_paymentAmount",
+									"type": "uint256"
+								}
+							],
+							"stateMutability": "nonpayable",
+							"type": "constructor"
+						},
+						{
+							"inputs": [],
+							"name": "InsufficientBalance",
+							"type": "error"
+						},
+						{
+							"inputs": [],
+							"name": "OnlyOwner",
+							"type": "error"
+						},
+						{
+							"inputs": [],
+							"name": "TransferFailed",
+							"type": "error"
+						},
+						{
+							"anonymous": false,
+							"inputs": [
+								{
+									"indexed": false,
+									"internalType": "address",
+									"name": "oldWorker",
+									"type": "address"
+								},
+								{
+									"indexed": false,
+									"internalType": "address",
+									"name": "newWorker",
+									"type": "address"
+								}
+							],
+							"name": "GigWorkerUpdated",
+							"type": "event"
+						},
+						{
+							"anonymous": false,
+							"inputs": [
+								{
+									"indexed": false,
+									"internalType": "uint256",
+									"name": "oldAmount",
+									"type": "uint256"
+								},
+								{
+									"indexed": false,
+									"internalType": "uint256",
+									"name": "newAmount",
+									"type": "uint256"
+								}
+							],
+							"name": "PaymentAmountUpdated",
+							"type": "event"
+						},
+						{
+							"anonymous": false,
+							"inputs": [
+								{
+									"indexed": true,
+									"internalType": "address",
+									"name": "from",
+									"type": "address"
+								},
+								{
+									"indexed": true,
+									"internalType": "address",
+									"name": "to",
+									"type": "address"
+								},
+								{
+									"indexed": false,
+									"internalType": "uint256",
+									"name": "amount",
+									"type": "uint256"
+								},
+								{
+									"indexed": false,
+									"internalType": "uint256",
+									"name": "timestamp",
+									"type": "uint256"
+								}
+							],
+							"name": "PaymentSent",
+							"type": "event"
+						},
+						{
+							"inputs": [],
+							"name": "getContractBalance",
+							"outputs": [
+								{
+									"internalType": "uint256",
+									"name": "",
+									"type": "uint256"
+								}
+							],
+							"stateMutability": "view",
+							"type": "function"
+						},
+						{
+							"inputs": [],
+							"name": "gigWorker",
+							"outputs": [
+								{
+									"internalType": "address payable",
+									"name": "",
+									"type": "address"
+								}
+							],
+							"stateMutability": "view",
+							"type": "function"
+						},
+						{
+							"inputs": [],
+							"name": "owner",
+							"outputs": [
+								{
+									"internalType": "address",
+									"name": "",
+									"type": "address"
+								}
+							],
+							"stateMutability": "view",
+							"type": "function"
+						},
+						{
+							"inputs": [],
+							"name": "paymentAmount",
+							"outputs": [
+								{
+									"internalType": "uint256",
+									"name": "",
+									"type": "uint256"
+								}
+							],
+							"stateMutability": "view",
+							"type": "function"
+						},
+						{
+							"inputs": [],
+							"name": "sendPayment",
+							"outputs": [],
+							"stateMutability": "nonpayable",
+							"type": "function"
+						},
+						{
+							"inputs": [
+								{
+									"internalType": "address payable",
+									"name": "_newWorker",
+									"type": "address"
+								}
+							],
+							"name": "updateGigWorker",
+							"outputs": [],
+							"stateMutability": "nonpayable",
+							"type": "function"
+						},
+						{
+							"inputs": [
+								{
+									"internalType": "uint256",
+									"name": "_newAmount",
+									"type": "uint256"
+								}
+							],
+							"name": "updatePaymentAmount",
+							"outputs": [],
+							"stateMutability": "nonpayable",
+							"type": "function"
+						},
+						{
+							"stateMutability": "payable",
+							"type": "receive"
+						}
+					]
+            // Add the ABI from Remix (copy it from the 'ABI' section in your compiled contract)
+        
+        
+        let provider;
+        let signer;
+        let contract;
+
+        // Connect MetaMask
+        async function connectWallet() {
+            if (typeof window.ethereum == "undefined") {
+                alert("MetaMask is not installed!");
+                return;
+            }
+
+            provider = new ethers.providers.Web3Provider(window.ethereum);
+            await provider.send("eth_requestAccounts", []);
+            signer = provider.getSigner();
+
+            const walletAddress = await signer.getAddress();
+            document.getElementById("walletAddress").textContent = walletAddress;
+
+            contract = new ethers.Contract(contractAddress, contractABI, signer);
+            updateContractBalance();
+        }
+
+        // Update contract balance
+        async function updateContractBalance() {
+            const balance = await provider.getBalance(contractAddress);
+            document.getElementById("contractBalance").textContent = ethers.utils.formatEther(balance);
+        }
+
+        // Send payment
+        async function sendPayment() {
+            try {
+                const tx = await contract.sendPayment();
+                await tx.wait();
+                alert("Payment sent successfully!");
+                updateContractBalance();
+            } catch (error) {
+                console.error(error);
+                alert("Failed to send payment.");
+            }
+        }
+
+        // Update payment amount
+        async function updatePaymentAmount() {
+            const newAmount = document.getElementById("newPaymentAmount").value;
+            try {
+                const tx = await contract.updatePaymentAmount(ethers.utils.parseEther(newAmount));
+                await tx.wait();
+                alert("Payment amount updated successfully!");
+            } catch (error) {
+                console.error(error);
+                alert("Failed to update payment amount.");
+            }
+        }
+
+        // Update gig worker address
+        async function updateGigWorker() {
+            const newWorker = document.getElementById("newGigWorker").value;
+            try {
+                const tx = await contract.updateGigWorker(newWorker);
+                await tx.wait();
+                alert("Gig worker updated successfully!");
+            } catch (error) {
+                console.error(error);
+                alert("Failed to update gig worker.");
+            }
+        }
+
+        // Event listeners
+        document.getElementById("connectWallet").addEventListener("click", connectWallet);
+        document.getElementById("sendPayment").addEventListener("click", sendPayment);
+        document.getElementById("updatePaymentAmount").addEventListener("click", updatePaymentAmount);
+        document.getElementById("updateGigWorker").addEventListener("click", updateGigWorker);
+    </script>
+</body>
+</html>
